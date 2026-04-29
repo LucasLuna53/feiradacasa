@@ -1,0 +1,143 @@
+{
+  "project_name": "Feira da Casa",
+  "theme_and_archetype": {
+    "theme": "LIGHT",
+    "archetype": "1 (Organic & Earthy)",
+    "vibe": "Modern Brazilian, Warm, Fresh, Household-friendly"
+  },
+  "typography": {
+    "heading_font": "Manrope",
+    "body_font": "Figtree",
+    "data_font": "Roboto Mono",
+    "scale": {
+      "h1": "text-4xl tracking-tight leading-tight",
+      "h2": "text-2xl tracking-tight",
+      "h3": "text-xl",
+      "body": "text-base leading-relaxed",
+      "caption": "text-sm tracking-wide",
+      "overline": "text-xs uppercase tracking-[0.2em]"
+    }
+  },
+  "colors": {
+    "brand_primary": "#2F7C4C",
+    "brand_primary_light": "#E8F4EC",
+    "accent_tomato": "#E1523D",
+    "accent_mustard": "#F1A832",
+    "background_base": "#FAFAF9",
+    "surface_white": "#FFFFFF",
+    "text_primary": "#1C1917",
+    "text_secondary": "#57534E",
+    "border_subtle": "#E7E5E4",
+    "status": {
+      "low_stock": "#E1523D",
+      "good_stock": "#2F7C4C",
+      "price_down": "#2F7C4C",
+      "price_up": "#E1523D"
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Generous Spacing, Mobile-first. 'p-4' is baseline, 'p-6' for cards.",
+    "screen_padding": "px-4 md:px-6",
+    "card_padding": "p-5",
+    "gap_standard": "gap-4",
+    "border_radius": {
+      "card": "rounded-2xl",
+      "button": "rounded-xl",
+      "tag": "rounded-full"
+    }
+  },
+  "surface_strategy": {
+    "style": "Clay & Crisp (Neumorphic Hybrid)",
+    "cards": "bg-white shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-stone-200/50",
+    "bottom_nav": "bg-white/90 backdrop-blur-xl border-t border-stone-200 shadow-[0_-10px_40px_rgba(0,0,0,0.03)] pb-safe pt-2",
+    "headers": "bg-stone-50/80 backdrop-blur-md z-50 sticky top-0"
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#2F7C4C] text-white rounded-xl py-4 px-6 font-semibold active:scale-95 transition-transform",
+      "secondary": "bg-white text-[#1C1917] border border-stone-200 rounded-xl py-4 px-6 font-semibold active:bg-stone-50",
+      "fab": "absolute bottom-6 right-6 bg-[#2F7C4C] shadow-lg rounded-full w-14 h-14 flex items-center justify-center active:scale-90"
+    },
+    "inputs": {
+      "search": "bg-white border-stone-200 rounded-xl px-4 py-3 text-base flex-row items-center gap-2",
+      "qty_control": "flex-row items-center bg-stone-100 rounded-full px-1 py-1"
+    },
+    "stock_item_card": {
+      "layout": "flex-row items-center p-4 bg-white rounded-2xl border border-stone-100 shadow-sm mb-3",
+      "emoji_container": "w-12 h-12 rounded-full bg-stone-50 flex items-center justify-center text-2xl mr-4",
+      "data_layout": "flex-1",
+      "qty_display": "font-mono font-bold text-lg text-stone-800"
+    },
+    "shopping_list_item": {
+      "layout": "flex-row items-center py-3 border-b border-stone-100 last:border-b-0",
+      "checkbox": "w-6 h-6 rounded-full border-2 border-stone-300 mr-3 active:bg-brand_primary",
+      "price_tag": "font-mono text-sm text-stone-500 bg-stone-100 px-2 py-1 rounded"
+    }
+  },
+  "screens": {
+    "onboarding": {
+      "layout": "Hero image taking top 50%, bottom 50% white card pulling up with h1, body, and primary full-width button.",
+      "media_slot": "onboarding_hero"
+    },
+    "estoque_stock": {
+      "header": "Large title 'Estoque', search bar below.",
+      "content": "Horizontal scroll chips for categories (Hortifruti, Laticínios, etc). Vertical list of Stock Item Cards.",
+      "action": "Floating Action Button to add item manually or scan."
+    },
+    "lista_shopping_list": {
+      "header": "Title 'Lista de Compras' + 'Auto-generated' tag.",
+      "content": "Items below min-stock automatically appear. Swipable list items. 'Scan Receipt' big CTA at bottom to mark purchased."
+    },
+    "scanner": {
+      "ui": "Camera view taking full screen. Overlay with focus box. Haptic feedback on capture. Monospaced font for data extraction preview overlay."
+    },
+    "receitas_recipes": {
+      "layout": "Bento grid of recipe cards. If ingredients missing, red 'Faltam 2' badge. CTA 'Add missing to List'."
+    },
+    "comunidade": {
+      "layout": "Feed of price updates. Anonymous avatars. Up/down trend arrows for prices."
+    }
+  },
+  "interactions": {
+    "haptics": "MANDATORY on all button presses, list swiping, qty increments, and successful receipt scans.",
+    "transitions": "Smooth spring animations for expanding cards (recipes/price history).",
+    "test_ids": "Use data-testid on ALL interactive elements (e.g., 'btn-add-stock', 'tab-lista', 'input-search')."
+  },
+  "media": {
+    "images": [
+      {
+        "category": "onboarding_hero",
+        "url": "https://static.prod-images.emergentagent.com/jobs/d86e7c35-c9a5-4656-bd48-24c342a80e7b/images/764db140365a22bc1c9bc3e799e1456c9501fb911550576b666f3e67a2f17f7c.png",
+        "description": "Warm aesthetic illustration of Brazilian kitchen counter"
+      },
+      {
+        "category": "texture_background",
+        "url": "https://static.prod-images.emergentagent.com/jobs/d86e7c35-c9a5-4656-bd48-24c342a80e7b/images/f86131ba802ef4436a5c122a8ab2737c99e363d3aa700c91ed3ba74bf08af9b8.png",
+        "description": "Soft organic texture background for headers or cards"
+      },
+      {
+        "category": "receipt_scanner_art",
+        "url": "https://static.prod-images.emergentagent.com/jobs/d86e7c35-c9a5-4656-bd48-24c342a80e7b/images/98afacaef2bf893f8d15f475855c5688a6737356b7e0ce59ca34447192ff3548.png",
+        "description": "3D minimalist art of glowing receipt for scanner empty state"
+      },
+      {
+        "category": "grocery_stock_1",
+        "url": "https://images.pexels.com/photos/5498214/pexels-photo-5498214.jpeg",
+        "description": "Supermarket fresh produce"
+      },
+      {
+        "category": "recipe_thumbnail_1",
+        "url": "https://images.pexels.com/photos/17710506/pexels-photo-17710506.jpeg",
+        "description": "Brazilian feast"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Use NativeWind or pure React Native StyleSheet following these token scales.",
+    "Do NOT use 'Inter' for headings. Use Manrope for headings and Figtree for body.",
+    "For Price History and Receipt scanning data, use Roboto Mono to align columns perfectly.",
+    "Implement soft shadows + 1px borders on cards to match the 'Clay & Crisp' surface strategy.",
+    "Add 'data-testid' to every interactive button, tab, and input.",
+    "Use lucide-react-native for icons."
+  ]
+}
