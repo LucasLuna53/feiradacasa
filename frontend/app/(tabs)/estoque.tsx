@@ -40,6 +40,22 @@ export default function Estoque() {
     try { await api.post(`/products/${p.id}/qty`, { delta }); } catch { load(); }
   };
 
+  const deleteProduct = (p: Product) => {
+    const doDel = async () => {
+      setItems(arr => arr.filter(x => x.id !== p.id));
+      try { await api.delete(`/products/${p.id}`); } catch { load(); }
+    };
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm(`Remover "${p.name}" do estoque?`)) doDel();
+    } else {
+      Alert.alert("Excluir produto", `Remover "${p.name}" do estoque?`, [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Excluir", style: "destructive", onPress: doDel },
+      ]);
+    }
+  };
+
+
   const filtered = cat === "Todos" ? items : items.filter(i => i.category === cat);
 
   const submitAdd = async () => {
