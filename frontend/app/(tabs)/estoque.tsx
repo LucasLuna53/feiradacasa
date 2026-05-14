@@ -297,7 +297,3 @@ const s = StyleSheet.create({
   scanMeta: { fontSize: 12, color: C.text2, marginTop: 2 },
   brandTag: { fontSize: 11, color: C.primary, marginTop: 4, fontWeight: "600" },
 });
-me: { fontSize: 15, fontWeight: "700", color: C.text },
-  scanMeta: { fontSize: 12, color: C.text2, marginTop: 2 },
-  brandTag: { fontSize: 11, color: C.primary, marginTop: 4, fontWeight: "600" },
-});
