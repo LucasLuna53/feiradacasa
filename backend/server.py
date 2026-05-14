@@ -402,9 +402,29 @@ async def scan_receipt(body: ReceiptScanIn, user: dict = Depends(get_current_use
         system_message="Você extrai dados estruturados de cupons fiscais.",
     ).with_model("openai", "gpt-4o")
 
+    # If PDF, convert first page to JPEG
+    image_b64 = body.image_base64
+    if (body.mime_type or "").lower() == "application/pdf":
+        try:
+            import base64 as _b64, io as _io
+            import pypdfium2 as pdfium
+            raw = _b64.b64decode(body.image_base64)
+            pdf = pdfium.PdfDocument(_io.BytesIO(raw))
+            if len(pdf) == 0:
+                raise HTTPException(400, "PDF sem páginas")
+            page = pdf[0]
+            pil = page.render(scale=2.0).to_pil()
+            buf = _io.BytesIO()
+            pil.save(buf, format="JPEG", quality=85)
+            image_b64 = _b64.b64encode(buf.getvalue()).decode()
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(400, f"Falha ao ler PDF: {e}")
+
     msg = UserMessage(
         text=RECEIPT_PROMPT,
-        file_contents=[ImageContent(image_base64=body.image_base64)],
+        file_contents=[ImageContent(image_base64=image_b64)],
     )
     try:
         raw = await chat.send_message(msg)

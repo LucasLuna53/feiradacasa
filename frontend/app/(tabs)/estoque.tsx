@@ -4,6 +4,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { Plus, Camera, Minus, X, ScanLine } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
+import { Platform } from "react-native";
 import { api } from "../../src/api";
 import { C, SHADOW } from "../../src/theme";
 
@@ -48,26 +50,66 @@ export default function Estoque() {
     } catch (e: any) { Alert.alert("Erro", e?.response?.data?.detail || "Falha"); }
   };
 
-  const startScan = async () => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) {
-      // fallback to library
-      const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!lib.granted) return Alert.alert("Permissão", "Conceda permissão para usar câmera/galeria");
-    }
-    const result = perm.granted
-      ? await ImagePicker.launchCameraAsync({ base64: true, quality: 0.6, mediaTypes: ImagePicker.MediaTypeOptions.Images })
-      : await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.6, mediaTypes: ImagePicker.MediaTypeOptions.Images });
-    if (result.canceled || !result.assets?.[0]?.base64) return;
+  const doScan = async (b64: string, mime: string) => {
     setScanOpen(true); setScanning(true); setExtracted(null);
     try {
-      const r = await api.post("/receipts/scan", { image_base64: result.assets[0].base64, mime_type: "image/jpeg" });
+      const r = await api.post("/receipts/scan", { image_base64: b64, mime_type: mime });
       setExtracted(r.data);
       setMarketName(r.data?.market || "");
     } catch (e: any) {
       Alert.alert("Erro", e?.response?.data?.detail || "Falha ao processar");
       setScanOpen(false);
     } finally { setScanning(false); }
+  };
+
+  const pickCamera = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) return Alert.alert("Permissão", "Conceda permissão para usar a câmera");
+    const r = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.6, mediaTypes: ImagePicker.MediaTypeOptions.Images });
+    if (r.canceled || !r.assets?.[0]?.base64) return;
+    doScan(r.assets[0].base64, "image/jpeg");
+  };
+
+  const pickGallery = async () => {
+    const r = await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.6, mediaTypes: ImagePicker.MediaTypeOptions.Images });
+    if (r.canceled || !r.assets?.[0]?.base64) return;
+    doScan(r.assets[0].base64, "image/jpeg");
+  };
+
+  const pickPDF = async () => {
+    const r = await DocumentPicker.getDocumentAsync({ type: ["application/pdf", "image/*"], copyToCacheDirectory: true });
+    if (r.canceled || !r.assets?.[0]) return;
+    const asset = r.assets[0];
+    const mime = asset.mimeType || "application/pdf";
+    try {
+      let b64 = "";
+      if (Platform.OS === "web") {
+        // On web, fetch the blob URI and convert to base64
+        const resp = await fetch(asset.uri);
+        const blob = await resp.blob();
+        b64 = await new Promise<string>((res, rej) => {
+          const fr = new FileReader();
+          fr.onload = () => { const s = String(fr.result || ""); res(s.split(",")[1] || s); };
+          fr.onerror = rej;
+          fr.readAsDataURL(blob);
+        });
+      } else {
+        const FileSystem = await import("expo-file-system");
+        b64 = await (FileSystem as any).readAsStringAsync(asset.uri, { encoding: "base64" });
+      }
+      doScan(b64, mime);
+    } catch (e: any) {
+      Alert.alert("Erro", "Não foi possível ler o arquivo");
+    }
+  };
+
+  const startScan = () => {
+    Alert.alert("Escanear cupom", "Como deseja anexar?", [
+      { text: "Câmera", onPress: pickCamera },
+      { text: "Galeria", onPress: pickGallery },
+      { text: "PDF / Arquivo", onPress: pickPDF },
+      { text: "Cancelar", style: "cancel" },
+    ]);
   };
 
   const commitScan = async () => {
@@ -101,8 +143,17 @@ export default function Estoque() {
   return (
     <SafeAreaView style={s.safe} edges={["top"]}>
       <View style={s.header}>
-        <Text style={s.title}>Estoque</Text>
-        <Text style={s.sub}>{items.length} produtos cadastrados</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={s.title}>Estoque</Text>
+          <Text style={s.sub}>{items.length} produtos cadastrados</Text>
+        </View>
+        <TouchableOpacity testID="header-scan" style={s.headerBtnAlt} onPress={startScan}>
+          <Camera color={C.mustard} size={20} />
+        </TouchableOpacity>
+        <TouchableOpacity testID="header-add-product" style={s.headerBtn} onPress={() => setAddOpen(true)}>
+          <Plus color="#fff" size={20} />
+          <Text style={s.headerBtnText}>Cadastrar</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8 }}>
@@ -206,7 +257,10 @@ export default function Estoque() {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.bg },
-  header: { paddingHorizontal: 20, paddingTop: 12 },
+  header: { paddingHorizontal: 20, paddingTop: 12, flexDirection: "row", alignItems: "center", gap: 8 },
+  headerBtn: { backgroundColor: C.primary, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, flexDirection: "row", alignItems: "center", gap: 4 },
+  headerBtnText: { color: "#fff", fontWeight: "700", fontSize: 13 },
+  headerBtnAlt: { backgroundColor: "#fff", padding: 10, borderRadius: 12, borderWidth: 1, borderColor: C.border },
   title: { fontSize: 28, fontWeight: "800", color: C.text, letterSpacing: -0.5 },
   sub: { color: C.text2, marginTop: 2 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, marginRight: 8, backgroundColor: "#fff", borderWidth: 1, borderColor: C.border },
