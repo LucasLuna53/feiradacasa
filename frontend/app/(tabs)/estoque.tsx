@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, RefreshControl, Modal, TextInput, Alert, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
-import { Plus, Camera, Minus, X, ScanLine } from "lucide-react-native";
+import { Plus, Camera, Minus, X, ScanLine, Trash2 } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
 import { Platform } from "react-native";
@@ -136,6 +136,9 @@ export default function Estoque() {
           <Text style={s.qty}>{item.current_qty}</Text>
           <TouchableOpacity testID={`qty-plus-${item.id}`} style={s.qBtn} onPress={() => changeQty(item, 1)}><Plus size={16} color={C.text} /></TouchableOpacity>
         </View>
+        <TouchableOpacity testID={`del-product-${item.id}`} style={s.delBtn} onPress={() => deleteProduct(item)}>
+          <Trash2 size={16} color={C.text2} />
+        </TouchableOpacity>
       </View>
     );
   };
@@ -277,6 +280,7 @@ const s = StyleSheet.create({
   qtyBox: { flexDirection: "row", alignItems: "center", backgroundColor: C.stone100, borderRadius: 999, padding: 3 },
   qBtn: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   qty: { minWidth: 32, textAlign: "center", fontWeight: "800", color: C.text, fontSize: 16 },
+  delBtn: { padding: 8, marginLeft: 4 },
   fabRow: { position: "absolute", bottom: 24, right: 20, flexDirection: "row", gap: 12, alignItems: "center" },
   fab: { width: 60, height: 60, borderRadius: 30, backgroundColor: C.primary, alignItems: "center", justifyContent: "center", ...SHADOW },
   fabSmall: { width: 50, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center", ...SHADOW },
@@ -290,6 +294,10 @@ const s = StyleSheet.create({
   btnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   scanItem: { padding: 12, borderRadius: 12, backgroundColor: C.stone50, marginBottom: 8, borderWidth: 1, borderColor: C.border },
   scanName: { fontSize: 15, fontWeight: "700", color: C.text },
+  scanMeta: { fontSize: 12, color: C.text2, marginTop: 2 },
+  brandTag: { fontSize: 11, color: C.primary, marginTop: 4, fontWeight: "600" },
+});
+me: { fontSize: 15, fontWeight: "700", color: C.text },
   scanMeta: { fontSize: 12, color: C.text2, marginTop: 2 },
   brandTag: { fontSize: 11, color: C.primary, marginTop: 4, fontWeight: "600" },
 });
