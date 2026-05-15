@@ -42,8 +42,16 @@ export default function Estoque() {
 
   const deleteProduct = (p: Product) => {
     const doDel = async () => {
+      const prev = items;
       setItems(arr => arr.filter(x => x.id !== p.id));
-      try { await api.delete(`/products/${p.id}`); } catch { load(); }
+      try {
+        await api.delete(`/products/${p.id}`);
+      } catch (e: any) {
+        // Revert on error and show actual problem
+        setItems(prev);
+        const detail = e?.response?.data?.detail || e?.message || "Falha ao excluir";
+        Alert.alert("Não foi possível excluir", String(detail));
+      }
     };
     if (Platform.OS === "web") {
       if (typeof window !== "undefined" && window.confirm(`Remover "${p.name}" do estoque?`)) doDel();

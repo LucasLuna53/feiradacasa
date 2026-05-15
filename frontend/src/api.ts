@@ -14,6 +14,16 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+api.interceptors.response.use(
+  (r) => r,
+  async (err) => {
+    if (err?.response?.status === 401) {
+      await AsyncStorage.removeItem("auth_token");
+    }
+    return Promise.reject(err);
+  }
+);
+
 export async function setToken(t: string | null) {
   if (t) await AsyncStorage.setItem("auth_token", t);
   else await AsyncStorage.removeItem("auth_token");
