@@ -739,7 +739,13 @@ async def forgot_password(body: ForgotPasswordIn):
         return {"ok": True, "message": "Se o e-mail existir, voce recebera as instrucoes"}
     token = secrets.token_urlsafe(32)
     await db.password_resets.insert_one({"token": token, "user_id": user["id"], "email": email, "created_at": now_utc(), "used": False})
-    return {"ok": True, "message": "Se o e-mail existir, voce recebera as instrucoes", "dev_token": token}
+    rk = os.environ.get("RESEND_API_KEY","")
+    if rk:
+        try:
+            import resend; resend.api_key=rk; resend.Emails.send({"from":"Feira da Casa <onboarding@resend.dev>","to":email,"subject":"Recuperacao de senha","html":f"<p>Seu codigo: <b>{token[:8].upper()}</b></p>"})
+        except Exception as e:
+            logger.error(f"Email: {e}")
+    return {"ok": True, "message": "Se o e-mail existir, voce recebera as instrucoes"}
 
 @api.post("/auth/reset-password")
 async def reset_password(token: str, new_password: str):

@@ -26,3 +26,5 @@ jq>=1.6.0
 typer>=0.9.0
 pypdfium2==5.8.0
 pillow>=10.0.0
+
+resend>=0.8.0
