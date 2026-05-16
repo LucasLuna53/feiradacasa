@@ -699,6 +699,56 @@ async def family_members(user: dict = Depends(get_current_user)):
                 m[k] = v.isoformat()
     return {"group_id": gid, "members": members}
 
+
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str
+
+@api.post("/auth/change-password")
+async def change_password(body: ChangePasswordIn, user: dict = Depends(get_current_user)):
+    u = await db.users.find_one({"id": user["id"]})
+    if not u or not verify_password(body.current_password, u["password_hash"]):
+        raise HTTPException(400, "Senha atual incorreta")
+    await db.users.update_one({"id": user["id"]}, {"$set": {"password_hash": hash_password(body.new_password)}})
+    return {"ok": True}
+
+@api.get("/reports/summary")
+async def reports_summary(user: dict = Depends(get_current_user)):
+    gid = get_group_id(user)
+    total_products = await db.products.count_documents({"group_id": gid})
+    total_purchases = await db.price_history.count_documents({"group_id": gid})
+    pipeline = [{"$match": {"group_id": gid}}, {"$group": {"_id": None, "total": {"$sum": {"$multiply": ["$price", "$qty"]}}}}]
+    result = await db.price_history.aggregate(pipeline).to_list(1)
+    total_spent = result[0]["total"] if result else 0
+    market_pipeline = [{"$match": {"group_id": gid}}, {"$group": {"_id": "$market", "count": {"$sum": 1}}}, {"$sort": {"count": -1}}, {"$limit": 1}]
+    top_market_result = await db.price_history.aggregate(market_pipeline).to_list(1)
+    top_market = top_market_result[0]["_id"] if top_market_result else None
+    product_pipeline = [{"$match": {"group_id": gid}}, {"$group": {"_id": "$product_name", "count": {"$sum": 1}}}, {"$sort": {"count": -1}}, {"$limit": 1}]
+    top_product_result = await db.price_history.aggregate(product_pipeline).to_list(1)
+    top_product = top_product_result[0]["_id"] if top_product_result else None
+    return {"total_products": total_products, "total_purchases": total_purchases, "total_spent": round(total_spent, 2), "top_market": top_market, "top_product": top_product}
+
+class ForgotPasswordIn(BaseModel):
+    email: str
+
+@api.post("/auth/forgot-password")
+async def forgot_password(body: ForgotPasswordIn):
+    email = body.email.lower().strip()
+    user = await db.users.find_one({"email": email})
+    if not user:
+        return {"ok": True, "message": "Se o e-mail existir, voce recebera as instrucoes"}
+    token = secrets.token_urlsafe(32)
+    await db.password_resets.insert_one({"token": token, "user_id": user["id"], "email": email, "created_at": now_utc(), "used": False})
+    return {"ok": True, "message": "Se o e-mail existir, voce recebera as instrucoes", "dev_token": token}
+
+@api.post("/auth/reset-password")
+async def reset_password(token: str, new_password: str):
+    rec = await db.password_resets.find_one({"token": token, "used": False})
+    if not rec:
+        raise HTTPException(400, "Token invalido ou expirado")
+    await db.users.update_one({"id": rec["user_id"]}, {"$set": {"password_hash": hash_password(new_password)}})
+    await db.password_resets.update_one({"token": token}, {"$set": {"used": True}})
+    return {"ok": True}
 # ---------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------

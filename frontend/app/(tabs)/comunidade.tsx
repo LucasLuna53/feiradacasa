@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { View, Text, StyleSheet, FlatList, RefreshControl, TouchableOpacity, Modal, TextInput, Alert } from "react-native";
+import { View, Text, StyleSheet, FlatList, RefreshControl, TouchableOpacity, Modal, TextInput, Alert, KeyboardAvoidingView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { TrendingDown, MapPin, Plus, X } from "lucide-react-native";
@@ -11,6 +11,11 @@ type Summary = { product_name: string; min: number; avg: number; max: number; co
 const fmtBRL = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`;
 
 export default function Comunidade() {
+  const [filterEstado, setFilterEstado] = useState("");
+  const [filterCidade, setFilterCidade] = useState("");
+  const [filterBairro, setFilterBairro] = useState("");
+  const [filterMercado, setFilterMercado] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [summaries, setSummaries] = useState<Summary[]>([]);
   const [feed, setFeed] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,6 +50,17 @@ export default function Comunidade() {
         <Text style={s.sub}>Preços anônimos compartilhados por todos</Text>
       </View>
 
+      <TouchableOpacity onPress={() => setShowFilters(f => !f)} style={{ marginHorizontal: 16, marginBottom: 8, backgroundColor: C.primaryLight, borderRadius: 12, padding: 10, alignItems: "center" }}>
+        <Text style={{ color: C.primary, fontWeight: "700" }}>{showFilters ? "Ocultar filtros" : "Filtrar por estado, cidade, bairro ou mercado"}</Text>
+      </TouchableOpacity>
+      {showFilters && (
+        <View style={{ marginHorizontal: 16, marginBottom: 8, backgroundColor: "#fff", borderRadius: 16, padding: 14, borderWidth: 1, borderColor: C.borderSoft }}>
+          <TextInput style={s.input} placeholder="Estado (ex: SP)" placeholderTextColor={C.text2} value={filterEstado} onChangeText={setFilterEstado} />
+          <TextInput style={[s.input, { marginTop: 8 }]} placeholder="Cidade (ex: Recife)" placeholderTextColor={C.text2} value={filterCidade} onChangeText={setFilterCidade} />
+          <TextInput style={[s.input, { marginTop: 8 }]} placeholder="Bairro" placeholderTextColor={C.text2} value={filterBairro} onChangeText={setFilterBairro} />
+          <TextInput style={[s.input, { marginTop: 8 }]} placeholder="Nome do mercado" placeholderTextColor={C.text2} value={filterMercado} onChangeText={setFilterMercado} />
+        </View>
+      )}
       <FlatList
         data={summaries}
         keyExtractor={(it) => it.product_name}
@@ -105,7 +121,7 @@ export default function Comunidade() {
         <Plus color="#fff" size={26} />
       </TouchableOpacity>
 
-      <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
+      <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <View style={s.modalBg}>
           <View style={s.modal}>
             <View style={s.modalHead}>
@@ -123,7 +139,7 @@ export default function Comunidade() {
             <TouchableOpacity testID="comm-submit" style={s.btn} onPress={submit}><Text style={s.btnText}>Compartilhar (anônimo)</Text></TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </KeyboardAvoidingView></Modal>
     </SafeAreaView>
   );
 }

@@ -28,7 +28,7 @@ export default function Login() {
 
   return (
     <SafeAreaView style={s.safe}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
           <View style={s.brand}>
             <View style={s.logo}><ShoppingBasket color={C.primary} size={36} /></View>
@@ -70,7 +70,11 @@ export default function Login() {
             </Link>
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      
+      <TouchableOpacity onPress={forgotPassword} style={{ alignItems: "center", marginTop: 12 }}>
+        <Text style={{ color: C.primary, fontWeight: "600" }}>Esqueci minha senha</Text>
+      </TouchableOpacity>
+</KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

@@ -1,11 +1,10 @@
 import { useState, useCallback } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, RefreshControl, Modal, TextInput, Alert, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, FlatList, RefreshControl, Modal, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { Plus, Camera, Minus, X, ScanLine, Trash2 } from "lucide-react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
-import { Platform } from "react-native";
 import { api } from "../../src/api";
 import { C, SHADOW } from "../../src/theme";
 
@@ -210,7 +209,7 @@ export default function Estoque() {
       </View>
 
       {/* Add product modal */}
-      <Modal visible={addOpen} transparent animationType="slide" onRequestClose={() => setAddOpen(false)}>
+      <Modal visible={addOpen} transparent animationType="slide" onRequestClose={() => setAddOpen(false)}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <View style={s.modalBg}>
           <View style={s.modal}>
             <View style={s.modalHead}>
@@ -240,7 +239,7 @@ export default function Estoque() {
             <TouchableOpacity testID="prod-submit" style={s.btn} onPress={submitAdd}><Text style={s.btnText}>Cadastrar</Text></TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </KeyboardAvoidingView></Modal>
 
       {/* Scan result modal */}
       <Modal visible={scanOpen} transparent animationType="slide" onRequestClose={() => setScanOpen(false)}>

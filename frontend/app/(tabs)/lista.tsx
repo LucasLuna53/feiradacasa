@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Alert, TextInput, Modal } from "react-native";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Alert, TextInput, Modal, KeyboardAvoidingView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 import { Plus, Check, Trash2, X } from "lucide-react-native";
@@ -43,6 +43,10 @@ export default function Lista() {
     try { await api.patch(`/shopping-list/${it.id}`, { checked }); } catch {}
   };
 
+  const toggleAuto = (it: AutoItem) => {
+    setAuto(a => a.map(x => x.product_id === it.product_id ? { ...x, checked: !x.checked } : x));
+  };
+
   const removeManual = async (it: ManualItem) => {
     setManual(m => m.filter(x => x.id !== it.id));
     try { await api.delete(`/shopping-list/${it.id}`); } catch {}
@@ -69,7 +73,7 @@ export default function Lista() {
       <View style={s.item} testID={`list-item-${item.product_id || item.id}`}>
         <View style={s.emojiBox}><Text style={s.emoji}>{item.emoji || "📦"}</Text></View>
         <View style={{ flex: 1 }}>
-          <Text style={s.itemName}>{item.name}</Text>
+          <Text style={[s.itemName, item.checked && s.strikethrough]}>{item.name}</Text>
           <Text style={s.itemMeta}>
             {isAuto ? `Comprar ${item.qty} ${item.unit || ""}` : `${item.qty} un`}
             {isAuto && item.last_price ? ` · último ${fmtBRL(item.last_price)}` : ""}
@@ -81,7 +85,7 @@ export default function Lista() {
           <TouchableOpacity testID={`check-${item.id}`} onPress={() => toggleManual(item)} style={[s.check, item.checked && s.checked]}>
             {item.checked ? <Check size={16} color="#fff" /> : null}
           </TouchableOpacity>
-        ) : <View style={s.autoBadge}><Text style={s.autoBadgeText}>auto</Text></View>}
+        ) : <TouchableOpacity onPress={() => toggleAuto(item)} style={[s.check, item.checked && s.checked]}>{item.checked ? <Check size={16} color="#fff" /> : null}</TouchableOpacity>}
         {!isAuto ? (
           <TouchableOpacity onPress={() => removeManual(item)} style={s.trash} testID={`del-${item.id}`}>
             <Trash2 size={16} color={C.text2} />
@@ -124,7 +128,7 @@ export default function Lista() {
         <Plus color="#fff" size={26} />
       </TouchableOpacity>
 
-      <Modal visible={addOpen} transparent animationType="slide" onRequestClose={() => setAddOpen(false)}>
+      <Modal visible={addOpen} transparent animationType="slide" onRequestClose={() => setAddOpen(false)}><KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
         <View style={s.modalBg}>
           <View style={s.modal}>
             <View style={s.modalHead}>
@@ -138,7 +142,7 @@ export default function Lista() {
             <TouchableOpacity testID="add-item-submit" style={s.btn} onPress={addManual}><Text style={s.btnText}>Adicionar</Text></TouchableOpacity>
           </View>
         </View>
-      </Modal>
+      </KeyboardAvoidingView></Modal>
     </SafeAreaView>
   );
 }
@@ -166,7 +170,7 @@ const s = StyleSheet.create({
   emptyTitle: { fontSize: 20, fontWeight: "700", color: C.text },
   emptyText: { color: C.text2, textAlign: "center", marginTop: 6, paddingHorizontal: 40 },
   fab: { position: "absolute", bottom: 24, right: 20, width: 60, height: 60, borderRadius: 30, backgroundColor: C.primary, alignItems: "center", justifyContent: "center", ...SHADOW },
-  modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
+  modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end", paddingBottom: 0 },
   modal: { backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingBottom: 32 },
   modalHead: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   modalTitle: { fontSize: 20, fontWeight: "800", color: C.text },
@@ -174,4 +178,5 @@ const s = StyleSheet.create({
   input: { backgroundColor: C.stone50, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 14, fontSize: 16, color: C.text, borderWidth: 1, borderColor: C.border },
   btn: { backgroundColor: C.primary, borderRadius: 14, paddingVertical: 16, alignItems: "center", marginTop: 18 },
   btnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  strikethrough: { textDecorationLine: "line-through", color: "#aaa" },
 });

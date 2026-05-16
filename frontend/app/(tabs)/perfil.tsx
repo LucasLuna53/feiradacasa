@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal, TextInput } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
-import { LogOut, Users, Copy, Share2, X } from "lucide-react-native";
+import { LogOut, Users, Copy, Share2, X, FileText, Lock } from "lucide-react-native";
 import { useAuth } from "../../src/auth";
 import { api } from "../../src/api";
 import { C, SHADOW } from "../../src/theme";
@@ -14,6 +14,11 @@ export default function Perfil() {
   const [members, setMembers] = useState<any[]>([]);
   const [joinOpen, setJoinOpen] = useState(false);
   const [joinCode, setJoinCode] = useState("");
+  const [reportOpen, setReportOpen] = useState(false);
+  const [report, setReport] = useState(null);
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pwAtual, setPwAtual] = useState("");
+  const [pwNova, setPwNova] = useState("");
 
   const loadMembers = useCallback(async () => {
     try { const r = await api.get("/family/members"); setMembers(r.data.members || []); } catch {}
@@ -31,6 +36,23 @@ export default function Perfil() {
       setJoinOpen(false); setJoinCode(""); loadMembers();
       Alert.alert("Pronto!", "Você entrou no grupo familiar. Estoque sincronizado.");
     } catch (e: any) { Alert.alert("Erro", e?.response?.data?.detail || "Código inválido"); }
+  };
+
+  const loadReport = async () => {
+    try {
+      const r = await api.get("/reports/summary");
+      setReport(r.data);
+      setReportOpen(true);
+    } catch { Alert.alert("Erro", "Nao foi possivel gerar o relatorio"); }
+  };
+
+  const changePassword = async () => {
+    if (!pwAtual || !pwNova) return Alert.alert("Atencao", "Preencha todos os campos");
+    try {
+      await api.post("/auth/change-password", { current_password: pwAtual, new_password: pwNova });
+      Alert.alert("Pronto!", "Senha alterada!");
+      setPwOpen(false); setPwAtual(""); setPwNova("");
+    } catch (e) { Alert.alert("Erro", "Falha ao alterar senha"); }
   };
 
   const doLogout = async () => {
@@ -88,7 +110,9 @@ export default function Perfil() {
           )}
         </View>
 
-        <TouchableOpacity testID="btn-logout" style={[s.btn, { backgroundColor: C.tomato, marginTop: 24 }]} onPress={doLogout}>
+        <TouchableOpacity style={[s.btn, { backgroundColor: "#4A90D9", marginTop: 16 }]} onPress={loadReport}><FileText size={18} color="#fff" /><Text style={s.btnText}>Ver Relatorio</Text></TouchableOpacity>
+        <TouchableOpacity style={[s.btn, { backgroundColor: "#7B68EE", marginTop: 8 }]} onPress={() => setPwOpen(true)}><Lock size={18} color="#fff" /><Text style={s.btnText}>Alterar Senha</Text></TouchableOpacity>
+        <TouchableOpacity testID="btn-logout" style={[s.btn, { backgroundColor: C.tomato, marginTop: 8 }]} onPress={doLogout}>
           <LogOut size={18} color="#fff" />
           <Text style={s.btnText}>Sair</Text>
         </TouchableOpacity>
@@ -109,6 +133,10 @@ export default function Perfil() {
           </View>
         </View>
       </Modal>
+      <Modal visible={reportOpen} transparent animationType="slide" onRequestClose={() => setReportOpen(false)}><View style={s.modalBg}><View style={s.modal}><View style={s.modalHead}><Text style={s.modalTitle}>Relatorio Geral</Text><TouchableOpacity onPress={() => setReportOpen(false)}><X color={C.text} size={22} /></TouchableOpacity></View>{report ? (<View style={{ backgroundColor: C.stone50, borderRadius: 12, padding: 14, marginTop: 8 }}><Text style={{ fontWeight: "800", color: C.text, marginBottom: 8 }}>Resumo de Compras</Text><Text style={{ color: C.text2 }}>Total de itens no estoque: {report.total_products || 0}</Text><Text style={{ color: C.text2, marginTop: 4 }}>Compras registradas: {report.total_purchases || 0}</Text><Text style={{ color: C.text2, marginTop: 4 }}>Gasto total: R$ {(report.total_spent || 0).toFixed(2)}</Text><Text style={{ color: C.text2, marginTop: 4 }}>Mercado favorito: {report.top_market || "—"}</Text><Text style={{ color: C.text2, marginTop: 4 }}>Item mais comprado: {report.top_product || "—"}</Text></View>) : <Text style={{ color: C.text2, textAlign: "center", marginTop: 20 }}>Carregando...</Text>}</View></View></Modal>
+
+      <Modal visible={pwOpen} transparent animationType="slide" onRequestClose={() => setPwOpen(false)}><View style={s.modalBg}><View style={s.modal}><View style={s.modalHead}><Text style={s.modalTitle}>Alterar Senha</Text><TouchableOpacity onPress={() => setPwOpen(false)}><X color={C.text} size={22} /></TouchableOpacity></View><Text style={s.label}>Senha Atual</Text><TextInput style={s.input} secureTextEntry value={pwAtual} onChangeText={setPwAtual} placeholder="••••••••" placeholderTextColor={C.text2} /><Text style={s.label}>Nova Senha</Text><TextInput style={s.input} secureTextEntry value={pwNova} onChangeText={setPwNova} placeholder="••••••••" placeholderTextColor={C.text2} /><TouchableOpacity style={s.btn} onPress={changePassword}><Text style={s.btnText}>Salvar nova senha</Text></TouchableOpacity></View></View></Modal>
+
     </SafeAreaView>
   );
 }
