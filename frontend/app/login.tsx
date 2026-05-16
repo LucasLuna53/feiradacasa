@@ -4,6 +4,7 @@ import { useRouter, Link } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ShoppingBasket } from "lucide-react-native";
 import { useAuth } from "../src/auth";
+import { api } from "../src/api";
 import { C, SHADOW } from "../src/theme";
 
 export default function Login() {
@@ -12,6 +13,14 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const forgotPassword = async () => {
+    if (!email) return Alert.alert("Atencao", "Digite seu e-mail primeiro");
+    try {
+      await api.post("/auth/forgot-password", { email });
+      Alert.alert("Pronto!", "Se o e-mail existir, voce recebera as instrucoes.");
+    } catch { Alert.alert("Erro", "Nao foi possivel enviar o e-mail"); }
+  };
 
   const submit = async () => {
     if (!email || !password) return Alert.alert("Atenção", "Preencha e-mail e senha");
