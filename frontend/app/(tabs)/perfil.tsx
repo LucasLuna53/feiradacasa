@@ -55,6 +55,12 @@ export default function Perfil() {
     } catch (e) { Alert.alert("Erro", "Falha ao alterar senha"); }
   };
 
+
+  const leaveFamily = async () => {
+    Alert.alert("Desvincular", "Tem certeza que deseja sair do grupo familiar?", [{text:"Cancelar"},{text:"Sair",style:"destructive",onPress:async()=>{
+      try { await api.post("/family/leave"); loadMembers(); Alert.alert("Pronto!","Voce saiu do grupo."); } catch(e){Alert.alert("Erro","Falha ao sair");}
+    }}]);
+  };
   const doLogout = async () => {
     await logout();
     router.replace("/login");
@@ -110,6 +116,8 @@ export default function Perfil() {
           )}
         </View>
 
+
+        <TouchableOpacity style={[s.btn, { backgroundColor: "#E88C00", marginTop: 8 }]} onPress={leaveFamily}><Text style={s.btnText}>Sair do grupo familiar</Text></TouchableOpacity>
         <TouchableOpacity style={[s.btn, { backgroundColor: "#4A90D9", marginTop: 16 }]} onPress={loadReport}><FileText size={18} color="#fff" /><Text style={s.btnText}>Ver Relatorio</Text></TouchableOpacity>
         <TouchableOpacity style={[s.btn, { backgroundColor: "#7B68EE", marginTop: 8 }]} onPress={() => setPwOpen(true)}><Lock size={18} color="#fff" /><Text style={s.btnText}>Alterar Senha</Text></TouchableOpacity>
         <TouchableOpacity testID="btn-logout" style={[s.btn, { backgroundColor: C.tomato, marginTop: 8 }]} onPress={doLogout}>

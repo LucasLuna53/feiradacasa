@@ -755,6 +755,12 @@ async def reset_password(token: str, new_password: str):
     await db.users.update_one({"id": rec["user_id"]}, {"$set": {"password_hash": hash_password(new_password)}})
     await db.password_resets.update_one({"token": token}, {"$set": {"used": True}})
     return {"ok": True}
+
+@api.post("/family/leave")
+async def family_leave(user: dict = Depends(get_current_user)):
+    await db.users.update_one({"id": user["id"]}, {"$set": {"family_group_id": None}})
+    await seed_default_products(user["id"])
+    return {"ok": True}
 # ---------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------
