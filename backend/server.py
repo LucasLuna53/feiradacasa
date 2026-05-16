@@ -742,7 +742,7 @@ async def forgot_password(body: ForgotPasswordIn):
     rk = os.environ.get("RESEND_API_KEY","")
     if rk:
         try:
-            import resend; resend.api_key=rk.strip().strip(); resend.Emails.send({"from":"Feira da Casa <onboarding@resend.dev>","to":email,"subject":"Recuperacao de senha","html":f"<p>Seu codigo: <b>{token[:8].upper()}</b></p>"})
+            import resend; resend.api_key=rk.strip().replace(chr(10),"").replace(chr(13),"").strip(); resend.Emails.send({"from":"Feira da Casa <onboarding@resend.dev>","to":email,"subject":"Recuperacao de senha","html":f"<p>Seu codigo: <b>{token[:8].upper()}</b></p>"})
         except Exception as e:
             logger.error(f"Email: {e}")
     return {"ok": True, "message": "Se o e-mail existir, voce recebera as instrucoes"}
