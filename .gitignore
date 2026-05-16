@@ -88,3 +88,4 @@ credentials.json
 # Environment and credential files
 # Environment and credential files
 # Environment and credential files
+frontend/.metro-cache/
