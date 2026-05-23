@@ -546,12 +546,9 @@ async def commit_receipt(body: ReceiptCommitIn, user: dict = Depends(get_current
 # ---------------------------------------------------------------
 @api.post("/recipes/suggest")
 async def suggest_recipes(user: dict = Depends(get_current_user)):
-    if not EMERGENT_LLM_KEY:
-        raise HTTPException(500, "EMERGENT_LLM_KEY não configurada")
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-    except Exception as e:
-        raise HTTPException(500, f"Biblioteca LLM indisponível: {e}")
+    ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not ANTHROPIC_KEY:
+        raise HTTPException(500, "ANTHROPIC_API_KEY nao configurada")
 
     gid = get_group_id(user)
     products = await db.products.find({"group_id": gid, "current_qty": {"$gt": 0}}, {"_id": 0}).to_list(500)
@@ -567,16 +564,10 @@ async def suggest_recipes(user: dict = Depends(get_current_user)):
         "\"ingredients_used\": [string], \"ingredients_missing\": [string], "
         "\"steps\": [string]}]}. "
         f"Despensa: {json.dumps(pantry, ensure_ascii=False)}"
-    )
-
-    chat = LlmChat(
-        api_key=EMERGENT_LLM_KEY,
-        session_id=f"recipes-{user['id']}-{uuid.uuid4()}",
-        system_message="Você sugere receitas brasileiras práticas em JSON.",
-    ).with_model("openai", "gpt-4o")
-
     try:
-        raw = await chat.send_message(UserMessage(text=prompt))
+        async with httpx.AsyncClient() as client:
+            resp = await client.post("https://api.anthropic.com/v1/messages", headers={"x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"}, json={"model": "claude-haiku-4-5-20251001", "max_tokens": 1024, "messages": [{"role": "user", "content": prompt}]}, timeout=30)
+            raw = resp.json()["content"][0]["text"]
     except Exception as e:
         logger.exception("LLM error")
         raise HTTPException(502, f"Falha ao gerar receitas: {e}")
