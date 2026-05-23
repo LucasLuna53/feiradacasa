@@ -546,7 +546,7 @@ async def commit_receipt(body: ReceiptCommitIn, user: dict = Depends(get_current
 # ---------------------------------------------------------------
 @api.post("/recipes/suggest")
 async def suggest_recipes(user: dict = Depends(get_current_user)):
-    ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+    ANTHROPIC_KEY = os.environ.get("GROQ_API_KEY", "")
     if not ANTHROPIC_KEY:
         raise HTTPException(500, "ANTHROPIC_API_KEY nao configurada")
 
@@ -555,6 +555,11 @@ async def suggest_recipes(user: dict = Depends(get_current_user)):
     pantry = [{"name": p["name"], "qty": p.get("current_qty", 0), "unit": p.get("unit", "un")} for p in products]
     if not pantry:
         return {"recipes": []}
+    import hashlib
+    pantry_hash = hashlib.md5(str(sorted([p["name"]+str(p["qty"]) for p in pantry])).encode()).hexdigest()
+    cached = await db.recipe_cache.find_one({"group_id": gid, "pantry_hash": pantry_hash})
+    if cached:
+        return {"recipes": cached["recipes"]}
 
     prompt = (
         "Você é um chef brasileiro. Dada a lista de ingredientes disponíveis na despensa, "
@@ -566,8 +571,8 @@ async def suggest_recipes(user: dict = Depends(get_current_user)):
         f"Despensa: {json.dumps(pantry, ensure_ascii=False)}"
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.post("https://api.anthropic.com/v1/messages", headers={"x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json"}, json={"model": "claude-haiku-4-5-20251001", "max_tokens": 1024, "messages": [{"role": "user", "content": prompt}]}, timeout=30)
-            raw = resp.json()["content"][0]["text"]
+            resp = await client.post("https://api.groq.com/openai/v1/chat/completions", headers={"Authorization": f"Bearer {ANTHROPIC_KEY}", "content-type": "application/json"}, json={"model": "llama-3.1-8b-instant", "max_tokens": 1024, "messages": [{"role": "user", "content": prompt}]}, timeout=30)
+            raw = resp.json()["choices"][0]["message"]["content"]
     except Exception as e:
         logger.exception("LLM error")
         raise HTTPException(502, f"Falha ao gerar receitas: {e}")
