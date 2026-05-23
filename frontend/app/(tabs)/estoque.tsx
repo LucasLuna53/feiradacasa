@@ -11,6 +11,7 @@ import { C, SHADOW } from "../../src/theme";
 type Product = { id: string; name: string; emoji: string; category: string; unit: string; min_qty: number; current_qty: number; last_price: number | null; last_date: string | null; last_market: string | null };
 
 const CATS = ["Todos", "Hortifruti", "Mercearia", "Laticínios", "Carnes", "Limpeza", "Outros"];
+const CAT_EMOJI: Record<string, string> = { "Todos": "🗂️", "Hortifruti": "🥬", "Mercearia": "🛒", "Laticínios": "🥛", "Carnes": "🥩", "Limpeza": "🧴", "Outros": "📦" };
 const EMOJIS_BY_CAT: Record<string, string> = { Hortifruti: "🥬", Mercearia: "🛒", Laticínios: "🥛", Carnes: "🥩", Limpeza: "🧴", Outros: "📦" };
 const fmtBRL = (v: number | null) => (v == null ? "—" : `R$ ${v.toFixed(2).replace(".", ",")}`);
 
@@ -25,7 +26,7 @@ export default function Estoque() {
   const [marketName, setMarketName] = useState("");
 
   // add product form
-  const [pName, setPName] = useState(""); const [pCat, setPCat] = useState("Outros"); const [pUnit, setPUnit] = useState("un"); const [pMin, setPMin] = useState("1");
+  const [pName, setPName] = useState(""); const [pCat, setPCat] = useState("Outros"); const [pUnit, setPUnit] = useState("un"); const [pMin, setPMin] = useState("1"); const [pEmoji, setPEmoji] = useState("📦");
 
   const load = useCallback(async () => {
     try { const r = await api.get("/products"); setItems(r.data); } catch {}
@@ -68,7 +69,7 @@ export default function Estoque() {
   const submitAdd = async () => {
     if (!pName.trim()) return Alert.alert("Atenção", "Informe o nome");
     try {
-      await api.post("/products", { name: pName.trim(), category: pCat, emoji: EMOJIS_BY_CAT[pCat] || "📦", unit: pUnit.trim() || "un", min_qty: parseInt(pMin) || 1, current_qty: 0 });
+      await api.post("/products", { name: pName.trim(), category: pCat, emoji: pEmoji || EMOJIS_BY_CAT[pCat] || "📦", unit: pUnit.trim() || "un", min_qty: parseInt(pMin) || 1, current_qty: 0 }); setPEmoji("📦");
       setPName(""); setPMin("1"); setAddOpen(false); load();
     } catch (e: any) { Alert.alert("Erro", e?.response?.data?.detail || "Falha"); }
   };
@@ -147,12 +148,13 @@ export default function Estoque() {
   const renderItem = ({ item }: { item: Product }) => {
     const low = item.current_qty < item.min_qty;
     return (
-      <View style={s.row} testID={`product-${item.id}`}>
+      <View style={[s.card, low && { borderColor: "#F44336", borderWidth: 1.5 }]} testID={`product-${item.id}`}>
         <View style={[s.emojiBox, low && { backgroundColor: "#FCEAE6" }]}><Text style={s.emoji}>{item.emoji || "📦"}</Text></View>
         <View style={{ flex: 1 }}>
           <Text style={s.name}>{item.name}</Text>
           <Text style={s.meta}>mín: <Text style={{ fontWeight: "700", color: C.text }}>{item.min_qty} {item.unit}</Text> · {item.category}</Text>
-          {item.last_price ? <Text style={s.price}>último {fmtBRL(item.last_price)} {item.last_market ? `· ${item.last_market}` : ""}</Text> : null}
+          {item.last_price ? <Text style={s.price}>📍 {fmtBRL(item.last_price)}{item.last_market ? ` · ${item.last_market}` : ""}</Text> : null}
+          {low && <Text style={{ color: "#F44336", fontSize: 11, fontWeight: "700", marginTop: 2 }}>⚠️ Estoque baixo!</Text>}
         </View>
         <View style={s.qtyBox}>
           <TouchableOpacity testID={`qty-minus-${item.id}`} style={s.qBtn} onPress={() => changeQty(item, -1)}><Minus size={16} color={C.text} /></TouchableOpacity>
@@ -185,7 +187,7 @@ export default function Estoque() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8 }}>
         {CATS.map(c => (
           <TouchableOpacity key={c} testID={`chip-${c}`} onPress={() => setCat(c)} style={[s.chip, cat === c && s.chipActive]}>
-            <Text style={[s.chipText, cat === c && s.chipTextActive]}>{c}</Text>
+            <Text style={[s.chipText, cat === c && s.chipTextActive]}>{CAT_EMOJI[c]} {c}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -217,7 +219,13 @@ export default function Estoque() {
               <TouchableOpacity onPress={() => setAddOpen(false)}><X color={C.text} size={22} /></TouchableOpacity>
             </View>
             <Text style={s.label}>Nome (genérico, ex: "Leite UHT 1L")</Text>
-            <TextInput testID="prod-name" style={s.input} value={pName} onChangeText={setPName} placeholder="Nome do produto" placeholderTextColor={C.text2} />
+            <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+              <TouchableOpacity style={{ width: 56, height: 56, borderRadius: 12, backgroundColor: C.stone50, borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center" }}>
+                <Text style={{ fontSize: 28 }}>{pEmoji}</Text>
+              </TouchableOpacity>
+              <TextInput testID="prod-name" style={[s.input, { flex: 1 }]} value={pName} onChangeText={setPName} placeholder="Nome do produto" placeholderTextColor={C.text2} />
+            </View>
+            <TextInput style={[s.input, { marginTop: 8 }]} value={pEmoji} onChangeText={setPEmoji} placeholder="Digite um emoji (ex: 🍎)" placeholderTextColor={C.text2} />
             <Text style={s.label}>Categoria</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 6 }}>
               {CATS.slice(1).map(c => (
@@ -294,6 +302,7 @@ const s = StyleSheet.create({
   chipActive: { backgroundColor: C.primary, borderColor: C.primary },
   chipText: { color: C.text2, fontSize: 13, fontWeight: "600" },
   chipTextActive: { color: "#fff" },
+  card: { backgroundColor: "#fff", borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: C.borderSoft },
   row: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", padding: 14, borderRadius: 16, marginBottom: 10, borderWidth: 1, borderColor: C.borderSoft },
   emojiBox: { width: 48, height: 48, borderRadius: 24, backgroundColor: C.stone50, alignItems: "center", justifyContent: "center", marginRight: 12 },
   emoji: { fontSize: 24 },
