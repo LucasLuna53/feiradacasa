@@ -7,6 +7,7 @@ import { api } from "../../src/api";
 import { C, SHADOW } from "../../src/theme";
 
 type Summary = { product_name: string; min: number; avg: number; max: number; count: number; markets: string[] };
+type FeedItem = { id: string; product_name: string; market: string; city: string; neighborhood: string; price: number; created_at: string; confirmed: number; contested: number };
 
 const fmtBRL = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`;
 
@@ -20,7 +21,9 @@ export default function Comunidade() {
   const [feed, setFeed] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState(false);
-  const [q, setQ] = useState({ product_name: "", market: "", region: "Brasil", price: "" });
+  const [q, setQ] = useState({ product_name: "", market: "", city: "", neighborhood: "", price: "" });
+  const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab] = useState<"feed"|"ranking">("feed");
 
   const load = useCallback(async () => {
     try {
@@ -36,8 +39,8 @@ export default function Comunidade() {
     const price = parseFloat(q.price.replace(",", "."));
     if (!q.product_name || !q.market || !price) return Alert.alert("Atenção", "Preencha produto, mercado e preço");
     try {
-      await api.post("/community/prices", { product_name: q.product_name, market: q.market, region: q.region, price });
-      setOpen(false); setQ({ product_name: "", market: "", region: "Brasil", price: "" });
+      await api.post("/community/prices", { product_name: q.product_name, market: q.market, city: q.city, neighborhood: q.neighborhood, region: (q.city && q.neighborhood) ? q.neighborhood+", "+q.city : q.city||"Brasil", price });
+      setOpen(false); setQ({ product_name: "", market: "", city: "", neighborhood: "", price: "" });
       load();
       Alert.alert("Obrigado!", "Seu preço ajuda a comunidade economizar.");
     } catch (e: any) { Alert.alert("Erro", e?.response?.data?.detail || "Falha"); }
@@ -48,6 +51,15 @@ export default function Comunidade() {
       <View style={s.header}>
         <Text style={s.title}>Comunidade</Text>
         <Text style={s.sub}>Preços anônimos compartilhados por todos</Text>
+        <TextInput style={s.searchInput} placeholder="Buscar produto..." placeholderTextColor={C.text2} value={search} onChangeText={setSearch} />
+        <View style={s.tabs}>
+          <TouchableOpacity style={[s.tab, activeTab==="feed" && s.tabActive]} onPress={() => setActiveTab("feed")}>
+            <Text style={[s.tabText, activeTab==="feed" && s.tabTextActive]}>Feed</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[s.tab, activeTab==="ranking" && s.tabActive]} onPress={() => setActiveTab("ranking")}>
+            <Text style={[s.tabText, activeTab==="ranking" && s.tabTextActive]}>Ranking Mercados</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <TouchableOpacity onPress={() => setShowFilters(f => !f)} style={{ marginHorizontal: 16, marginBottom: 8, backgroundColor: C.primaryLight, borderRadius: 12, padding: 10, alignItems: "center" }}>
@@ -61,7 +73,28 @@ export default function Comunidade() {
           <TextInput style={[s.input, { marginTop: 8 }]} placeholder="Nome do mercado" placeholderTextColor={C.text2} value={filterMercado} onChangeText={setFilterMercado} />
         </View>
       )}
-      <FlatList
+      {activeTab === "ranking" && (
+        <FlatList
+          data={ranking()}
+          keyExtractor={(_, i) => String(i)}
+          contentContainerStyle={{ padding: 16 }}
+          renderItem={({ item, index }) => (
+            <View style={[s.card, index === 0 && { borderColor: C.primary, borderWidth: 2 }]}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Text style={{ fontSize: 22 }}>{index === 0 ? "🏆" : index === 1 ? "🥈" : index === 2 ? "🥉" : "  "}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.name}>{item.name}</Text>
+                  <Text style={{ color: C.text2, fontSize: 12 }}>{item.count} preços registrados</Text>
+                </View>
+                <Text style={{ fontSize: 18, fontWeight: "800", color: C.primary }}>R$ {item.avg.toFixed(2).replace(".",",")}</Text>
+              </View>
+              {index === 0 && <View style={s.alertBadge}><Text style={s.alertText}>🏅 Mercado mais barato da comunidade</Text></View>}
+            </View>
+          )}
+          ListEmptyComponent={<View style={s.empty}><Text style={s.emptyEmoji}>🏪</Text><Text style={s.emptyTitle}>Sem dados ainda</Text><Text style={s.emptyText}>Compartilhe preços para ver o ranking!</Text></View>}
+        />
+      )}
+      {activeTab === "feed" && <FlatList
         data={summaries}
         keyExtractor={(it) => it.product_name}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />}
@@ -97,6 +130,9 @@ export default function Comunidade() {
                 <Text style={s.statValue}>{fmtBRL(item.max)}</Text>
               </View>
             </View>
+            {item.min < item.avg * 0.8 && (
+              <View style={s.alertBadge}><Text style={s.alertText}>🔥 Preço abaixo da média na região!</Text></View>
+            )}
             <View style={s.bottomRow}>
               <Text style={s.count}>{item.count} relatos</Text>
               {item.markets?.length ? (
@@ -117,6 +153,7 @@ export default function Comunidade() {
         }
       />
 
+      }
       <TouchableOpacity testID="fab-community" style={s.fab} onPress={() => setOpen(true)}>
         <Plus color="#fff" size={26} />
       </TouchableOpacity>
@@ -132,8 +169,10 @@ export default function Comunidade() {
             <TextInput testID="comm-product" style={s.input} value={q.product_name} onChangeText={t => setQ({ ...q, product_name: t })} placeholder="Ex.: Leite UHT 1L" placeholderTextColor={C.text2} />
             <Text style={s.label}>Mercado</Text>
             <TextInput testID="comm-market" style={s.input} value={q.market} onChangeText={t => setQ({ ...q, market: t })} placeholder="Ex.: Atacadão" placeholderTextColor={C.text2} />
-            <Text style={s.label}>Região</Text>
-            <TextInput testID="comm-region" style={s.input} value={q.region} onChangeText={t => setQ({ ...q, region: t })} placeholder="Ex.: SP-Capital" placeholderTextColor={C.text2} />
+            <Text style={s.label}>Cidade</Text>
+            <TextInput style={s.input} value={q.city} onChangeText={t => setQ({ ...q, city: t })} placeholder="Ex.: Recife" placeholderTextColor={C.text2} />
+            <Text style={s.label}>Bairro</Text>
+            <TextInput style={s.input} value={q.neighborhood} onChangeText={t => setQ({ ...q, neighborhood: t })} placeholder="Ex.: Boa Viagem" placeholderTextColor={C.text2} />
             <Text style={s.label}>Preço (R$)</Text>
             <TextInput testID="comm-price" style={s.input} value={q.price} onChangeText={t => setQ({ ...q, price: t })} keyboardType="decimal-pad" placeholder="0,00" placeholderTextColor={C.text2} />
             <TouchableOpacity testID="comm-submit" style={s.btn} onPress={submit}><Text style={s.btnText}>Compartilhar (anônimo)</Text></TouchableOpacity>
@@ -176,5 +215,13 @@ const s = StyleSheet.create({
   label: { fontSize: 12, color: C.text2, marginTop: 8, marginBottom: 6, textTransform: "uppercase", fontWeight: "600", letterSpacing: 1 },
   input: { backgroundColor: C.stone50, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 14, fontSize: 16, color: C.text, borderWidth: 1, borderColor: C.border },
   btn: { backgroundColor: C.primary, borderRadius: 14, paddingVertical: 16, alignItems: "center", marginTop: 18 },
+  searchInput: { backgroundColor: "#fff", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: C.text, borderWidth: 1, borderColor: C.border, marginTop: 10 },
+  tabs: { flexDirection: "row", marginTop: 12, gap: 8 },
+  tab: { flex: 1, paddingVertical: 8, borderRadius: 10, backgroundColor: C.stone50, alignItems: "center" },
+  tabActive: { backgroundColor: C.primary },
+  tabText: { fontWeight: "700", color: C.text2, fontSize: 13 },
+  tabTextActive: { color: "#fff" },
+  alertBadge: { backgroundColor: "#E8F5E9", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, marginTop: 6 },
+  alertText: { color: "#2E7D32", fontSize: 11, fontWeight: "700" },
   btnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
 });
