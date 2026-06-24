@@ -184,13 +184,23 @@ export default function Estoque() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8 }}>
-        {CATS.map(c => (
-          <TouchableOpacity key={c} testID={`chip-${c}`} onPress={() => setCat(c)} style={[s.chip, cat === c && s.chipActive]}>
-            <Text style={[s.chipText, cat === c && s.chipTextActive]}>{CAT_EMOJI[c]} {c}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={s.chipBar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipBarInner}>
+          {CATS.map(c => (
+            <TouchableOpacity
+              key={c}
+              testID={`chip-${c}`}
+              onPress={() => setCat(c)}
+              activeOpacity={0.8}
+              style={[s.chip, cat === c && s.chipActive]}
+            >
+              <Text numberOfLines={1} style={[s.chipText, cat === c && s.chipTextActive]}>
+                {CAT_EMOJI[c]} {c}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
       <FlatList
         data={filtered}
@@ -250,20 +260,27 @@ export default function Estoque() {
       </KeyboardAvoidingView></Modal>
 
       {/* Scan result modal */}
-      <Modal visible={scanOpen} transparent animationType="slide" onRequestClose={() => setScanOpen(false)}>
+      <Modal visible={scanOpen} transparent animationType="slide" onRequestClose={() => { setScanOpen(false); setExtracted(null); setMarketName(""); }}>
         <View style={s.modalBg}>
           <View style={[s.modal, { maxHeight: "85%" }]}>
             <View style={s.modalHead}>
+              <TouchableOpacity testID="scan-cancel" onPress={() => { setScanOpen(false); setExtracted(null); setMarketName(""); }} style={s.cancelBtn}>
+                <X color={C.text} size={18} />
+                <Text style={s.cancelText}>Cancelar</Text>
+              </TouchableOpacity>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <ScanLine color={C.primary} size={22} />
-                <Text style={s.modalTitle}>Cupom escaneado</Text>
+                <Text style={s.modalTitle}>Cupom</Text>
               </View>
-              <TouchableOpacity onPress={() => setScanOpen(false)}><X color={C.text} size={22} /></TouchableOpacity>
+              <View style={{ width: 80 }} />
             </View>
             {scanning ? (
               <View style={{ alignItems: "center", paddingVertical: 40 }}>
                 <ActivityIndicator color={C.primary} size="large" />
                 <Text style={{ color: C.text2, marginTop: 12 }}>Analisando com IA...</Text>
+                <TouchableOpacity testID="scan-cancel-loading" onPress={() => { setScanOpen(false); setScanning(false); }} style={[s.btn, { backgroundColor: C.stone100, marginTop: 24 }]}>
+                  <Text style={[s.btnText, { color: C.text }]}>Cancelar</Text>
+                </TouchableOpacity>
               </View>
             ) : (
               <ScrollView style={{ maxHeight: 480 }}>
@@ -279,7 +296,12 @@ export default function Estoque() {
                     </View>
                   </View>
                 ))}
-                <TouchableOpacity testID="commit-scan" style={s.btn} onPress={commitScan}><Text style={s.btnText}>Adicionar ao estoque</Text></TouchableOpacity>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <TouchableOpacity testID="scan-cancel-bottom" onPress={() => { setScanOpen(false); setExtracted(null); setMarketName(""); }} style={[s.btn, { flex: 1, backgroundColor: C.stone100 }]}>
+                    <Text style={[s.btnText, { color: C.text }]}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity testID="commit-scan" style={[s.btn, { flex: 2 }]} onPress={commitScan}><Text style={s.btnText}>Adicionar ao estoque</Text></TouchableOpacity>
+                </View>
               </ScrollView>
             )}
           </View>
@@ -297,7 +319,9 @@ const s = StyleSheet.create({
   headerBtnAlt: { backgroundColor: "#fff", padding: 10, borderRadius: 12, borderWidth: 1, borderColor: C.border },
   title: { fontSize: 28, fontWeight: "800", color: C.text, letterSpacing: -0.5 },
   sub: { color: C.text2, marginTop: 2 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, marginRight: 8, backgroundColor: "#fff", borderWidth: 1, borderColor: C.border },
+  chip: { paddingHorizontal: 14, height: 36, justifyContent: "center", borderRadius: 999, marginRight: 8, backgroundColor: "#fff", borderWidth: 1, borderColor: C.border },
+  chipBar: { height: 52, backgroundColor: C.bg, borderBottomWidth: 1, borderBottomColor: C.borderSoft },
+  chipBarInner: { paddingHorizontal: 16, paddingVertical: 8, alignItems: "center" },
   chipSm: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, marginRight: 8, backgroundColor: C.stone50, borderWidth: 1, borderColor: C.border },
   chipActive: { backgroundColor: C.primary, borderColor: C.primary },
   chipText: { color: C.text2, fontSize: 13, fontWeight: "600" },
@@ -328,4 +352,6 @@ const s = StyleSheet.create({
   scanName: { fontSize: 15, fontWeight: "700", color: C.text },
   scanMeta: { fontSize: 12, color: C.text2, marginTop: 2 },
   brandTag: { fontSize: 11, color: C.primary, marginTop: 4, fontWeight: "600" },
+  cancelBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, backgroundColor: C.stone100 },
+  cancelText: { color: C.text, fontWeight: "700", fontSize: 13 },
 });

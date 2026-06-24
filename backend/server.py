@@ -389,22 +389,14 @@ RECEIPT_PROMPT = (
 
 @api.post("/receipts/scan")
 async def scan_receipt(body: ReceiptScanIn, user: dict = Depends(get_current_user)):
-    if not EMERGENT_LLM_KEY:
-        raise HTTPException(500, "EMERGENT_LLM_KEY não configurada")
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
-    except Exception as e:
-        raise HTTPException(500, f"Biblioteca LLM indisponível: {e}")
+    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+    if not groq_key:
+        raise HTTPException(500, "Scan indisponível: configure GROQ_API_KEY")
 
-    chat = LlmChat(
-        api_key=EMERGENT_LLM_KEY,
-        session_id=f"receipt-{user['id']}-{uuid.uuid4()}",
-        system_message="Você extrai dados estruturados de cupons fiscais.",
-    ).with_model("openai", "gpt-4o")
-
-    # If PDF, convert first page to JPEG
+    # If PDF, convert first page to JPEG (vision needs image)
     image_b64 = body.image_base64
-    if (body.mime_type or "").lower() == "application/pdf":
+    mime = (body.mime_type or "image/jpeg").lower()
+    if mime == "application/pdf":
         try:
             import base64 as _b64, io as _io
             import pypdfium2 as pdfium
@@ -417,23 +409,48 @@ async def scan_receipt(body: ReceiptScanIn, user: dict = Depends(get_current_use
             buf = _io.BytesIO()
             pil.save(buf, format="JPEG", quality=85)
             image_b64 = _b64.b64encode(buf.getvalue()).decode()
+            mime = "image/jpeg"
         except HTTPException:
             raise
         except Exception as e:
             raise HTTPException(400, f"Falha ao ler PDF: {e}")
 
-    msg = UserMessage(
-        text=RECEIPT_PROMPT,
-        file_contents=[ImageContent(image_base64=image_b64)],
-    )
+    # Groq vision (llama-4-scout supports images)
+    import httpx
+    model = os.environ.get("GROQ_VISION_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+    payload = {
+        "model": model,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": RECEIPT_PROMPT},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_b64}"}},
+                ],
+            }
+        ],
+        "temperature": 0.1,
+        "max_tokens": 2048,
+    }
     try:
-        raw = await chat.send_message(msg)
+        async with httpx.AsyncClient(timeout=90) as cx:
+            r = await cx.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                json=payload,
+            )
+        if r.status_code >= 400:
+            logger.error("Groq vision %s: %s", r.status_code, r.text[:300])
+            raise HTTPException(502, "Scan indisponível: configure GROQ_API_KEY")
+        text = (r.json().get("choices") or [{}])[0].get("message", {}).get("content", "")
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.exception("LLM error")
-        raise HTTPException(502, f"Falha ao processar imagem: {e}")
+        logger.exception("Groq vision error")
+        raise HTTPException(502, "Scan indisponível: configure GROQ_API_KEY")
 
-    text = str(raw).strip()
-    # Strip code fences if present
+    text = (text or "").strip()
     if text.startswith("```"):
         text = text.split("```", 2)[1]
         if text.startswith("json"):
@@ -442,7 +459,6 @@ async def scan_receipt(body: ReceiptScanIn, user: dict = Depends(get_current_use
     try:
         data = json.loads(text)
     except Exception:
-        # Best-effort: find first { ... }
         s, e = text.find("{"), text.rfind("}")
         if s >= 0 and e > s:
             try:
@@ -1012,24 +1028,26 @@ async def forgot_password(body: ForgotPasswordIn):
     email = body.email.lower().strip()
     user = await db.users.find_one({"email": email})
     if not user:
-        return {"ok": True, "message": "Se o e-mail existir, voce recebera as instrucoes"}
+        # Don't leak account existence — but also don't generate a code
+        return {"ok": False, "message": "E-mail não encontrado"}
     token = secrets.token_urlsafe(32)
-    await db.password_resets.insert_one({"token": token, "user_id": user["id"], "email": email, "created_at": now_utc(), "used": False})
-    rk = os.environ.get("RESEND_API_KEY","")
-    if rk:
-        try:
-            import resend; resend.api_key=rk.strip().replace(chr(10),"").replace(chr(13),"").strip(); resend.Emails.send({"from":"Feira da Casa <onboarding@resend.dev>","to":email,"subject":"Recuperacao de senha","html":f"<p>Seu codigo: <b>{token[:8].upper()}</b></p>"})
-        except Exception as e:
-            logger.error(f"Email: {e}")
-    return {"ok": True, "message": "Se o e-mail existir, voce recebera as instrucoes"}
+    code = token[:8].upper()
+    await db.password_resets.insert_one({"token": token, "code": code, "user_id": user["id"], "email": email, "created_at": now_utc(), "used": False})
+    return {"ok": True, "message": "Código gerado", "code": code}
 
 @api.post("/auth/reset-password")
 async def reset_password(token: str, new_password: str):
-    rec = await db.password_resets.find_one({"token": token, "used": False})
+    # Accept either the full token OR the 8-char uppercase code
+    code = token.strip().upper() if len(token.strip()) <= 12 else None
+    rec = None
+    if code:
+        rec = await db.password_resets.find_one({"code": code, "used": False})
     if not rec:
-        raise HTTPException(400, "Token invalido ou expirado")
+        rec = await db.password_resets.find_one({"token": token, "used": False})
+    if not rec:
+        raise HTTPException(400, "Código inválido ou expirado")
     await db.users.update_one({"id": rec["user_id"]}, {"$set": {"password_hash": hash_password(new_password)}})
-    await db.password_resets.update_one({"token": token}, {"$set": {"used": True}})
+    await db.password_resets.update_one({"_id": rec["_id"]}, {"$set": {"used": True}})
     return {"ok": True}
 
 @api.post("/family/leave")

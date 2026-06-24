@@ -15,6 +15,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="best-market" />
           <Stack.Screen name="product/[name]" />
+          <Stack.Screen name="forgot-password" />
         </Stack>
       </AuthProvider>
     </SafeAreaProvider>
