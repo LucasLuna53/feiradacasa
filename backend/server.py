@@ -542,23 +542,74 @@ async def commit_receipt(body: ReceiptCommitIn, user: dict = Depends(get_current
     return {"ok": True, "receipt_id": receipt_id}
 
 # ---------------------------------------------------------------
-# Recipes via GPT-4o
+# Recipes via Groq (primary) with Emergent LLM fallback
 # ---------------------------------------------------------------
+def _parse_recipe_json(text: str) -> dict:
+    text = (text or "").strip()
+    if text.startswith("```"):
+        text = text.split("```", 2)[1]
+        if text.startswith("json"):
+            text = text[4:]
+        text = text.strip().rstrip("`").strip()
+    try:
+        return json.loads(text)
+    except Exception:
+        s, e = text.find("{"), text.rfind("}")
+        if s >= 0 and e > s:
+            return json.loads(text[s:e+1])
+        raise HTTPException(502, "Resposta da IA inválida")
+
+async def _gen_recipes_groq(prompt: str) -> dict:
+    import httpx
+    key = os.environ.get("GROQ_API_KEY", "")
+    if not key:
+        raise HTTPException(500, "GROQ_API_KEY não configurada")
+    model = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+    async with httpx.AsyncClient(timeout=60) as cx:
+        r = await cx.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {"role": "system", "content": "Você sugere receitas brasileiras práticas. Responda APENAS com JSON válido."},
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": 0.7,
+            },
+        )
+        if r.status_code >= 400:
+            raise HTTPException(502, f"Groq erro {r.status_code}: {r.text[:200]}")
+        return _parse_recipe_json(r.json()["choices"][0]["message"]["content"])
+
+async def _gen_recipes_emergent(prompt: str, user_id: str) -> dict:
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=f"recipes-{user_id}-{uuid.uuid4()}",
+        system_message="Você sugere receitas brasileiras práticas em JSON.",
+    ).with_model("openai", "gpt-4o")
+    raw = await chat.send_message(UserMessage(text=prompt))
+    return _parse_recipe_json(str(raw))
+
 @api.post("/recipes/suggest")
 async def suggest_recipes(user: dict = Depends(get_current_user)):
-    ANTHROPIC_KEY = os.environ.get("GROQ_API_KEY", "")
-    if not ANTHROPIC_KEY:
-        raise HTTPException(500, "ANTHROPIC_API_KEY nao configurada")
-
     gid = get_group_id(user)
-    products = await db.products.find({"group_id": gid, "current_qty": {"$gt": 0}}, {"_id": 0}).to_list(500)
+    products = await db.products.find(
+        {"group_id": gid, "current_qty": {"$gt": 0}},
+        {"_id": 0, "name": 1, "current_qty": 1, "unit": 1},
+    ).to_list(500)
     pantry = [{"name": p["name"], "qty": p.get("current_qty", 0), "unit": p.get("unit", "un")} for p in products]
     if not pantry:
         return {"recipes": []}
+
     import hashlib
-    pantry_hash = hashlib.md5(str(sorted([p["name"]+str(p["qty"]) for p in pantry])).encode()).hexdigest()
+    pantry_hash = hashlib.md5(
+        str(sorted([p["name"] + str(p["qty"]) for p in pantry])).encode()
+    ).hexdigest()
     cached = await db.recipe_cache.find_one({"group_id": gid, "pantry_hash": pantry_hash})
-    if cached:
+    if cached and "recipes" in cached:
         return {"recipes": cached["recipes"]}
 
     prompt = (
@@ -569,29 +620,43 @@ async def suggest_recipes(user: dict = Depends(get_current_user)):
         "\"ingredients_used\": [string], \"ingredients_missing\": [string], "
         "\"steps\": [string]}]}. "
         f"Despensa: {json.dumps(pantry, ensure_ascii=False)}"
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post("https://api.groq.com/openai/v1/chat/completions", headers={"Authorization": f"Bearer {ANTHROPIC_KEY}", "content-type": "application/json"}, json={"model": "llama-3.1-8b-instant", "max_tokens": 1024, "messages": [{"role": "user", "content": prompt}]}, timeout=30)
-            raw = resp.json()["choices"][0]["message"]["content"]
-    except Exception as e:
-        logger.exception("LLM error")
-        raise HTTPException(502, f"Falha ao gerar receitas: {e}")
+    )
 
-    text = str(raw).strip()
-    if text.startswith("```"):
-        text = text.split("```", 2)[1]
-        if text.startswith("json"):
-            text = text[4:]
-        text = text.strip().rstrip("`").strip()
-    try:
-        data = json.loads(text)
-    except Exception:
-        s, e = text.find("{"), text.rfind("}")
-        if s >= 0 and e > s:
-            data = json.loads(text[s:e+1])
-        else:
-            raise HTTPException(502, "Resposta da IA inválida")
-    return data
+    last_err: Optional[str] = None
+    # Try Groq first (cheap, fast)
+    if os.environ.get("GROQ_API_KEY"):
+        try:
+            data = await _gen_recipes_groq(prompt)
+            await db.recipe_cache.update_one(
+                {"group_id": gid, "pantry_hash": pantry_hash},
+                {"$set": {"recipes": data.get("recipes", []), "created_at": now_utc()}},
+                upsert=True,
+            )
+            return data
+        except HTTPException as e:
+            last_err = f"groq HTTP {e.status_code}: {e.detail}"
+            logger.warning("Groq failed: %s", last_err)
+        except Exception as e:
+            last_err = f"groq: {e}"
+            logger.warning("Groq error: %s", e)
+
+    # Fallback to Emergent LLM
+    if EMERGENT_LLM_KEY:
+        try:
+            from emergentintegrations.llm.chat import LlmChat  # noqa: F401
+            data = await _gen_recipes_emergent(prompt, user["id"])
+            await db.recipe_cache.update_one(
+                {"group_id": gid, "pantry_hash": pantry_hash},
+                {"$set": {"recipes": data.get("recipes", []), "created_at": now_utc()}},
+                upsert=True,
+            )
+            return data
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(502, f"Falha ao gerar receitas. {last_err or ''} emergent: {e}")
+
+    raise HTTPException(500, f"Nenhum provedor de IA configurado. {last_err or 'Defina GROQ_API_KEY ou EMERGENT_LLM_KEY.'}")
 
 # ---------------------------------------------------------------
 # Community prices
@@ -650,8 +715,223 @@ async def post_community_price(body: CommunityPriceIn, user: dict = Depends(get_
         "region": body.region,
         "price": body.price,
         "date": now_utc(),
+        # internal-only field for moderation; never returned in any feed/summary
+        "_user_id": user["id"],
     }
     await db.community_prices.insert_one(doc)
+    return {"ok": True}
+
+# ---------------------------------------------------------------
+# Best market for current shopping list
+# ---------------------------------------------------------------
+@api.get("/shopping-list/best-market")
+async def best_market(user: dict = Depends(get_current_user)):
+    gid = get_group_id(user)
+    # Items to buy: auto (low stock) + manual
+    products = await db.products.find({"group_id": gid}, {"_id": 0}).to_list(1000)
+    auto_names = [p["name"] for p in products if int(p.get("current_qty", 0)) < int(p.get("min_qty", 1))]
+    manual = await db.shopping_list.find({"group_id": gid}, {"_id": 0, "name": 1}).to_list(500)
+    list_names = list({*auto_names, *[m["name"] for m in manual if m.get("name")]})
+    if not list_names:
+        return {"markets": [], "items_in_list": 0, "items_with_price": 0, "items_without_price": 0, "list_names": []}
+    # Look at recent community prices for these products (last 60 days)
+    cutoff = now_utc() - timedelta(days=60)
+    cur = db.community_prices.find(
+        {"product_name": {"$in": list_names}, "date": {"$gte": cutoff}},
+        {"_id": 0, "_user_id": 0},
+    ).sort("date", -1)
+    rows = await cur.to_list(5000)
+    # latest price per (market, product) pair
+    latest_by_pair: dict = {}
+    for r in rows:
+        key = (r.get("market") or "", r["product_name"])
+        if key not in latest_by_pair:
+            latest_by_pair[key] = float(r["price"])
+    # group by market
+    market_map: dict = {}
+    for (mkt, pname), price in latest_by_pair.items():
+        if not mkt:
+            continue
+        agg = market_map.setdefault(mkt, {"market": mkt, "items": {}, "total": 0.0})
+        agg["items"][pname] = price
+        agg["total"] = round(sum(agg["items"].values()), 2)
+    markets = sorted(
+        ({"market": v["market"], "total": v["total"], "items_covered": len(v["items"]), "items": v["items"]}
+         for v in market_map.values()),
+        key=lambda x: (-(x["items_covered"]), x["total"]),
+    )
+    items_with_price = len({p for (_m, p) in latest_by_pair.keys()})
+    return {
+        "markets": markets[:20],
+        "items_in_list": len(list_names),
+        "items_with_price": items_with_price,
+        "items_without_price": max(0, len(list_names) - items_with_price),
+        "list_names": list_names,
+    }
+
+# ---------------------------------------------------------------
+# Timeline of community prices for a product
+# ---------------------------------------------------------------
+@api.get("/community/timeline")
+async def community_timeline(product_name: str, region: Optional[str] = None, days: int = 180):
+    cutoff = now_utc() - timedelta(days=max(7, min(days, 730)))
+    q: dict = {"product_name": {"$regex": f"^{product_name}$", "$options": "i"}, "date": {"$gte": cutoff}}
+    if region:
+        q["region"] = region
+    rows = await db.community_prices.find(q, {"_id": 0, "_user_id": 0}).sort("date", 1).to_list(2000)
+    timeline = []
+    for r in rows:
+        d = r.get("date")
+        timeline.append({
+            "date": d.isoformat() if isinstance(d, datetime) else d,
+            "price": float(r["price"]),
+            "market": r.get("market"),
+            "region": r.get("region"),
+        })
+    return {"product_name": product_name, "timeline": timeline, "count": len(timeline)}
+
+# ---------------------------------------------------------------
+# Low-stock deals: items below min_qty AND with a recent community
+# price that is below the historical average for the user's region
+# ---------------------------------------------------------------
+@api.get("/products/low-stock-deals")
+async def low_stock_deals(user: dict = Depends(get_current_user)):
+    gid = get_group_id(user)
+    user_doc = await db.users.find_one({"id": user["id"]}, {"_id": 0, "region": 1})
+    region = (user_doc or {}).get("region")
+    products = await db.products.find({"group_id": gid}, {"_id": 0}).to_list(1000)
+    low = [p for p in products if int(p.get("current_qty", 0)) < int(p.get("min_qty", 1))]
+    if not low:
+        return {"deals": []}
+    cutoff = now_utc() - timedelta(days=30)
+    deals = []
+    for p in low:
+        name = p["name"]
+        # historical avg (any region, 6 months)
+        hist_cutoff = now_utc() - timedelta(days=180)
+        hist_rows = await db.community_prices.find(
+            {"product_name": {"$regex": f"^{name}$", "$options": "i"}, "date": {"$gte": hist_cutoff}},
+            {"_id": 0, "price": 1},
+        ).to_list(2000)
+        if not hist_rows:
+            continue
+        hist_prices = [float(r["price"]) for r in hist_rows]
+        avg = sum(hist_prices) / len(hist_prices)
+        # recent prices in user's region (or anywhere if no region)
+        recent_q: dict = {
+            "product_name": {"$regex": f"^{name}$", "$options": "i"},
+            "date": {"$gte": cutoff},
+        }
+        if region:
+            recent_q["region"] = region
+        recent = await db.community_prices.find(recent_q, {"_id": 0, "_user_id": 0}).sort("date", -1).to_list(50)
+        if not recent:
+            continue
+        best = min(recent, key=lambda r: float(r["price"]))
+        best_price = float(best["price"])
+        if best_price < avg:
+            deals.append({
+                "product_id": p["id"],
+                "product_name": name,
+                "emoji": p.get("emoji", "📦"),
+                "current_qty": p.get("current_qty", 0),
+                "min_qty": p.get("min_qty", 1),
+                "best_price": round(best_price, 2),
+                "avg_price": round(avg, 2),
+                "savings_pct": round(100 * (avg - best_price) / avg, 0),
+                "market": best.get("market"),
+                "region": best.get("region"),
+            })
+    deals.sort(key=lambda d: -d["savings_pct"])
+    return {"deals": deals}
+
+# ---------------------------------------------------------------
+# Shopping list templates
+# ---------------------------------------------------------------
+class ListTemplateIn(BaseModel):
+    name: str
+    items: List[dict]  # [{name, qty}]
+
+@api.get("/list-templates")
+async def list_templates(user: dict = Depends(get_current_user)):
+    gid = get_group_id(user)
+    tpls = await db.list_templates.find({"group_id": gid}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    for t in tpls:
+        for k, v in list(t.items()):
+            if isinstance(v, datetime):
+                t[k] = v.isoformat()
+    return tpls
+
+@api.post("/list-templates")
+async def create_template(body: ListTemplateIn, user: dict = Depends(get_current_user)):
+    gid = get_group_id(user)
+    doc = {
+        "id": str(uuid.uuid4()),
+        "group_id": gid,
+        "name": body.name.strip(),
+        "items": [{"name": (i.get("name") or "").strip(), "qty": int(i.get("qty") or 1)} for i in body.items if i.get("name")],
+        "created_at": now_utc(),
+    }
+    await db.list_templates.insert_one(doc)
+    return serialize(doc)
+
+@api.post("/list-templates/save-current")
+async def save_current_as_template(body: dict, user: dict = Depends(get_current_user)):
+    """Snapshot current shopping list (auto + manual) into a named template."""
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "Nome do modelo é obrigatório")
+    gid = get_group_id(user)
+    products = await db.products.find({"group_id": gid}, {"_id": 0}).to_list(1000)
+    items = []
+    for p in products:
+        if int(p.get("current_qty", 0)) < int(p.get("min_qty", 1)):
+            qty = int(p.get("min_qty", 1)) - int(p.get("current_qty", 0))
+            items.append({"name": p["name"], "qty": qty})
+    manual = await db.shopping_list.find({"group_id": gid}, {"_id": 0}).to_list(1000)
+    for m in manual:
+        items.append({"name": m.get("name", ""), "qty": int(m.get("qty", 1))})
+    items = [i for i in items if i["name"]]
+    if not items:
+        raise HTTPException(400, "Lista de compras está vazia")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "group_id": gid,
+        "name": name,
+        "items": items,
+        "created_at": now_utc(),
+    }
+    await db.list_templates.insert_one(doc)
+    return serialize(doc)
+
+@api.post("/list-templates/{tid}/apply")
+async def apply_template(tid: str, user: dict = Depends(get_current_user)):
+    gid = get_group_id(user)
+    tpl = await db.list_templates.find_one({"id": tid, "group_id": gid})
+    if not tpl:
+        raise HTTPException(404, "Modelo não encontrado")
+    added = 0
+    for it in tpl.get("items", []):
+        if not it.get("name"):
+            continue
+        await db.shopping_list.insert_one({
+            "id": str(uuid.uuid4()),
+            "group_id": gid,
+            "product_id": None,
+            "name": it["name"],
+            "qty": int(it.get("qty") or 1),
+            "checked": False,
+            "created_at": now_utc(),
+        })
+        added += 1
+    return {"ok": True, "added": added}
+
+@api.delete("/list-templates/{tid}")
+async def delete_template(tid: str, user: dict = Depends(get_current_user)):
+    gid = get_group_id(user)
+    res = await db.list_templates.delete_one({"id": tid, "group_id": gid})
+    if not res.deleted_count:
+        raise HTTPException(404, "Modelo não encontrado")
     return {"ok": True}
 
 # ---------------------------------------------------------------

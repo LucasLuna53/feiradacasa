@@ -13,6 +13,8 @@ export default function RootLayout() {
           <Stack.Screen name="login" />
           <Stack.Screen name="register" />
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="best-market" />
+          <Stack.Screen name="product/[name]" />
         </Stack>
       </AuthProvider>
     </SafeAreaProvider>
